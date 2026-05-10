@@ -1,0 +1,34 @@
+[build-system]
+requires = ["uv_build <0.12.0"]
+build-backend = "uv_build"
+
+[project]
+name = "backcrdt"
+version = "0.0.0"
+description = "BackCRDT"
+license = { file = "LICENSE" }
+authors = [
+  { name = "David Brochart", email = "david.brochart@gmail.com" },
+]
+readme = "README.md"
+keywords = [
+  "crdt",
+]
+requires-python = ">=3.10"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: Implementation :: CPython",
+]
+
+dependencies = [
+]
+
+[project.urls]
+Homepage = "https://github.com/davidbrochart/backcrdt"
