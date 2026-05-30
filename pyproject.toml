@@ -1,10 +1,10 @@
 [build-system]
-requires = ["uv_build <0.12.0"]
-build-backend = "uv_build"
+requires = ["maturin>=1.8.2,<2"]
+build-backend = "maturin"
 
 [project]
 name = "backcrdt"
-version = "0.0.0"
+dynamic = ["version"]
 description = "BackCRDT"
 license = { file = "LICENSE" }
 authors = [
@@ -28,7 +28,18 @@ classifiers = [
 ]
 
 dependencies = [
+  "typing_extensions >=4.15.0,<5.0.0; python_version<'3.11'",
+]
+
+[dependency-groups]
+test = [
+    "pytest >=9.0.3,<10",
 ]
 
 [project.urls]
 Homepage = "https://github.com/davidbrochart/backcrdt"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "backcrdt._backcrdt"
