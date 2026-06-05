@@ -1,5 +1,6 @@
 import sys
 from types import TracebackType
+from typing import TYPE_CHECKING
 
 from ._backcrdt import _MultiDoc, _Transaction
 
@@ -8,12 +9,15 @@ if sys.version_info >= (3, 11):
 else:  # pragma: nocover
     from typing_extensions import Self
 
+if TYPE_CHECKING:
+    from .doc import Doc
+
 
 class Transaction:
     def __init__(
         self,
         multi_doc: _MultiDoc,
-        doc: Doc,
+        doc: "Doc",
     ) -> None:
         self._multi_doc = multi_doc
         self._doc = doc

@@ -9,7 +9,9 @@ def test_doc(tmp_path: Path) -> None:
     doc1 = Doc(multi_doc)
     map1 = doc1.get("map", type=Map)
     with doc1.transaction():
-        map1.insert("number", 1)
+        map1.insert("number", 1.1)
+        map1.insert("string", "foo")
+        map1.insert("bool", True)
         update1 = doc1.get_update()
 
     doc2 = Doc(multi_doc)

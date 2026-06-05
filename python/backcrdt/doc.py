@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 from uuid import uuid4
 
 from .transaction import Transaction
@@ -6,11 +6,13 @@ from .transaction import Transaction
 if TYPE_CHECKING:
     from .multi_doc import MultiDoc
 
+T = TypeVar("T")
+
 
 class Doc:
     def __init__(
         self,
-        multi_doc: MultiDoc,
+        multi_doc: "MultiDoc",
     ) -> None:
         self._multi_doc = multi_doc
         self._id = str(uuid4())

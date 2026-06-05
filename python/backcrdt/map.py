@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from ._backcrdt import _Map
+from .text import Text
 from .transaction import Transaction
 
 
@@ -11,6 +14,9 @@ class Map:
         self._mounted = txn._txn.mount_map(name, txn._multi_doc, txn._doc._id)
         self._prelim = None
 
-    def insert(self, key: str, value: int) -> None:
+    def insert(self, key: str, value: object) -> None:
         with self.doc.transaction() as txn:
-            self._mounted.insert(txn._txn, key, value)
+            if isinstance(value, Text):
+                value._mounted = self._mounted.insert_text_prelim(txn._txn, key)
+            else:
+                self._mounted.insert(txn._txn, key, value)

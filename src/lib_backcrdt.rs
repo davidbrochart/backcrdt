@@ -1,8 +1,60 @@
 use std::cell::{RefCell, RefMut};
+use std::collections::HashMap;
 use std::path::Path;
+use bytes::Bytes;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyInt, PyString};
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::types::{PyBytes, PyDict, PyInt, PyList, PyString, PyTuple};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+
+fn py_to_value(value: &Bound<'_, PyAny>) -> PyResult<crate::lib0::Value> {
+    use crate::lib0::Number;
+
+    if value.is_none() {
+        return Ok(crate::lib0::Value::Null);
+    }
+    if let Ok(b) = value.extract::<bool>() {
+        return Ok(crate::lib0::Value::Bool(b));
+    }
+    if let Ok(i) = value.extract::<i64>() {
+        return Ok(crate::lib0::Value::Number(Number::Int(i)));
+    }
+    if let Ok(f) = value.extract::<f64>() {
+        return Ok(crate::lib0::Value::Number(Number::Float(f)));
+    }
+    if let Ok(s) = value.extract::<String>() {
+        return Ok(crate::lib0::Value::String(s));
+    }
+    if let Ok(b) = value.extract::<Vec<u8>>() {
+        return Ok(crate::lib0::Value::Bytes(Bytes::from(b)));
+    }
+    if let Ok(list) = value.cast::<PyList>() {
+        let mut items = Vec::with_capacity(list.len());
+        for item in list.iter() {
+            items.push(py_to_value(&item)?);
+        }
+        return Ok(crate::lib0::Value::Array(items));
+    }
+    if let Ok(tuple) = value.cast::<PyTuple>() {
+        let mut items = Vec::with_capacity(tuple.len());
+        for item in tuple.iter() {
+            items.push(py_to_value(&item)?);
+        }
+        return Ok(crate::lib0::Value::Array(items));
+    }
+    if let Ok(dict) = value.cast::<PyDict>() {
+        let mut map = HashMap::new();
+        for (key, val) in dict.iter() {
+            let k: String = key.extract()?;
+            map.insert(k, py_to_value(&val)?);
+        }
+        return Ok(crate::lib0::Value::Object(map));
+    }
+    Err(PyTypeError::new_err(format!("Unsupported type: {}", value.get_type().name()?)))
+}
+
+fn py_to_in(value: &Bound<'_, PyAny>) -> PyResult<crate::In> {
+    py_to_value(value).map(crate::In::Value)
+}
 
 pub enum Cell<'a, T> {
     Owned(T),
@@ -147,15 +199,35 @@ impl _Map {
 
 #[pymethods]
 impl _Map {
-    fn insert<'py>(&self, txn: &mut _Transaction, key: &str, value: u32) -> PyResult<()> {
+    fn insert<'py>(&self, txn: &mut _Transaction, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         let mut _t = txn.transaction();
         let mut t = _t.as_mut().unwrap().as_mut();
         let mut map = self
             .map
             .mount_mut(&mut t)
             .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount map: {}", e)))?;
-        let _ = map.insert(key, value);
+        let in_val = py_to_in(value)?;
+        let _ = map.insert(key, in_val);
         Ok(())
+    }
+
+    fn insert_text_prelim<'py>(
+        &self,
+        py: Python<'py>,
+        txn: &mut _Transaction,
+        key: &str,
+    ) -> PyResult<Py<_Text>> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let mut map = self
+            .map
+            .mount_mut(&mut t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount map: {}", e)))?;
+        let text: Unmounted<Text> = map
+            .insert(key, crate::types::text::TextPrelim::default())
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot insert text: {}", e)))?;
+        let py_text = Py::new(py, _Text::from(text, self.multi_doc.clone_ref(py), self.doc_id.clone()))?;
+        Ok(py_text)
     }
 }
 

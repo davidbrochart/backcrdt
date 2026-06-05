@@ -1,0 +1,82 @@
+name: test
+
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: ${{ matrix.os }} python-${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macos, windows]
+        rust-version: [stable]
+        python-version:
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+          - '3.14'
+
+    runs-on: ${{ matrix.os }}-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Set up python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ matrix.python-version }}
+        allow-prereleases: true
+
+    - name: Upgrade pip
+      run: python -m pip install --upgrade pip
+
+    - name: Install rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.rust-version }}
+        override: true
+
+    - name: Cache rust
+      uses: Swatinem/rust-cache@v2
+
+    - name: Download Ysr and setup lib.rs
+      run: |
+        curl -L -o main.zip https://github.com/Horusiath/ysr/archive/refs/heads/main.zip
+        unzip main.zip
+        rm main.zip
+        mv ysr-main/src/* src/
+        rm -rf ysr-main
+        cp src/lib.rs src/lib_original.rs
+        cat src/lib_backcrdt.rs src/lib_original.rs > /tmp/lib.rs
+        mv /tmp/lib.rs src/
+
+    - name: Build and install backcrdt
+      run: |
+        pip install -e . --group test
+
+    # - name: Check types
+    #   run: |
+    #     mypy python
+
+    - name: Run tests
+      if: ${{ !((matrix.python-version == '3.14') && (matrix.os == 'ubuntu')) }}
+      run: pytest --color=yes -v tests
+
+    - name: Run code coverage
+      if: ${{ (matrix.python-version == '3.14') && (matrix.os == 'ubuntu') }}
+      run: |
+        coverage run -m pytest tests
+        coverage report --show-missing #--fail-under=100
