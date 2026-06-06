@@ -38,5 +38,5 @@ class Doc:
 
     def __setitem__(self, key: str, value: T) -> None:
         with self.transaction() as txn:
-            value._mount(txn, key)
+            value._mount_root(txn, key)
         value.doc = self
