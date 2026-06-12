@@ -8,7 +8,7 @@ name = "backcrdt"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "0.28.3"
+pyo3 = "0.29.0"
 thiserror = "2.0"
 bytes = "1.10"
 bitflags = { version = "2.9", features = ["serde"] }
