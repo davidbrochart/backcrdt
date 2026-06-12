@@ -24,9 +24,6 @@ fn py_to_value(value: &Bound<'_, PyAny>) -> PyResult<crate::lib0::Value> {
     if let Ok(s) = value.extract::<String>() {
         return Ok(crate::lib0::Value::String(s));
     }
-    if let Ok(b) = value.extract::<Vec<u8>>() {
-        return Ok(crate::lib0::Value::Bytes(Bytes::from(b)));
-    }
     if let Ok(list) = value.cast::<PyList>() {
         let mut items = Vec::with_capacity(list.len());
         for item in list.iter() {
@@ -49,11 +46,53 @@ fn py_to_value(value: &Bound<'_, PyAny>) -> PyResult<crate::lib0::Value> {
         }
         return Ok(crate::lib0::Value::Object(map));
     }
+    if let Ok(b) = value.extract::<Vec<u8>>() {
+        return Ok(crate::lib0::Value::Bytes(Bytes::from(b)));
+    }
     Err(PyTypeError::new_err(format!("Unsupported type: {}", value.get_type().name()?)))
 }
 
 fn py_to_in(value: &Bound<'_, PyAny>) -> PyResult<crate::In> {
     py_to_value(value).map(crate::In::Value)
+}
+
+fn value_to_py<'py>(value: &crate::lib0::Value, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        crate::lib0::Value::Null | crate::lib0::Value::Undefined => Ok(py.None().into_bound(py)),
+        crate::lib0::Value::Bool(b) => {
+            let v = pyo3::IntoPyObject::into_pyobject(*b, py)?;
+            Ok((*v).clone().into_any())
+        }
+        crate::lib0::Value::Number(crate::lib0::Number::Int(i)) => {
+            let v = pyo3::IntoPyObject::into_pyobject(*i, py)?;
+            Ok((*v).clone().into_any())
+        }
+        crate::lib0::Value::Number(crate::lib0::Number::Float(f)) => {
+            let v = pyo3::IntoPyObject::into_pyobject(*f, py)?;
+            Ok((*v).clone().into_any())
+        }
+        crate::lib0::Value::String(s) => {
+            let v = pyo3::IntoPyObject::into_pyobject(s.clone(), py)?;
+            Ok((*v).clone().into_any())
+        }
+        crate::lib0::Value::Array(arr) => {
+            let list = PyList::empty(py);
+            for item in arr {
+                let v = value_to_py(item, py)?;
+                list.append(&v)?;
+            }
+            Ok(list.into_any())
+        }
+        crate::lib0::Value::Object(map) => {
+            let dict = PyDict::new(py);
+            for (k, v) in map {
+                let val = value_to_py(v, py)?;
+                dict.set_item(k.as_str(), val)?;
+            }
+            Ok(dict.into_any())
+        }
+        crate::lib0::Value::Bytes(b) => Ok(PyBytes::new(py, b).into_any()),
+    }
 }
 
 pub enum Cell<'a, T> {
@@ -182,6 +221,18 @@ impl _Text {
         let s = text.to_string();
         Ok(PyString::new(py, &s))
     }
+
+    fn insert(&self, txn: &mut _Transaction, index: usize, chunk: &str) -> PyResult<()> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let mut text = self
+            .text
+            .mount_mut(&mut t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount text: {}", e)))?;
+        text.insert(index, chunk)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot insert into text: {}", e)))?;
+        Ok(())
+    }
 }
 
 #[pyclass(unsendable)]
@@ -209,6 +260,35 @@ impl _Map {
         let in_val = py_to_in(value)?;
         let _ = map.insert(key, in_val);
         Ok(())
+    }
+
+    fn to_py<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let multi_doc = self.multi_doc.borrow(py);
+        let txn = multi_doc
+            .multi_doc
+            .transact(&self.doc_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot create transaction: {}", e)))?;
+        let map = self
+            .map
+            .mount(&txn)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount map: {}", e)))?;
+        let value = map
+            .to_value()
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot get value: {}", e)))?;
+        match value {
+            crate::lib0::Value::Object(obj) => {
+                let dict = PyDict::new(py);
+                for (k, v) in &obj {
+                    let val = value_to_py(v, py)?;
+                    dict.set_item(k.as_str(), val)?;
+                }
+                Ok(dict)
+            }
+            _ => {
+                let dict = PyDict::new(py);
+                Ok(dict)
+            }
+        }
     }
 
     fn insert_text_prelim<'py>(
