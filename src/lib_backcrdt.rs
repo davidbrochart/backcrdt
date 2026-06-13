@@ -1,5 +1,5 @@
 use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use bytes::Bytes;
 use pyo3::prelude::*;
@@ -191,6 +191,12 @@ impl _Transaction {
         let pymap: Py<_Map> = Py::new(py, _Map::from(map, multi_doc.clone().unbind(), doc_id.to_owned()))?;
         Ok(pymap)
     }
+
+    fn mount_array(&self, py: Python<'_>, name: &str, multi_doc: &Bound<'_, _MultiDoc>, doc_id: &str) -> PyResult<Py<_Array>> {
+        let list: Unmounted<List> = Unmounted::root(name.to_owned());
+        let pyarray: Py<_Array> = Py::new(py, _Array::from(list, multi_doc.clone().unbind(), doc_id.to_owned()))?;
+        Ok(pyarray)
+    }
 }
 
 #[pyclass(unsendable)]
@@ -328,6 +334,115 @@ impl _Map {
 //    }
 //}
 
+#[pyclass(unsendable)]
+pub struct _Array {
+    pub list: Unmounted<List>,
+    pub multi_doc: Py<_MultiDoc>,
+    pub doc_id: String,
+}
+
+impl _Array {
+    pub fn from(list: Unmounted<List>, multi_doc: Py<_MultiDoc>, doc_id: String) -> Self {
+        _Array { list, multi_doc, doc_id }
+    }
+}
+
+#[pymethods]
+impl _Array {
+    fn insert(&self, txn: &mut _Transaction, index: usize, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let mut list = self
+            .list
+            .mount_mut(&mut t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
+        let in_val = py_to_in(value)?;
+        let _ = list.insert(index, in_val);
+        Ok(())
+    }
+
+    fn insert_map_prelim<'py>(
+        &self,
+        py: Python<'py>,
+        txn: &mut _Transaction,
+        index: usize,
+    ) -> PyResult<Py<_Map>> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let mut list = self
+            .list
+            .mount_mut(&mut t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
+        let map_prelim: crate::MapPrelim = BTreeMap::<String, crate::In>::new().into();
+        let map: Unmounted<Map> = list
+            .insert(index, map_prelim)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot insert map: {}", e)))?;
+        let py_map = Py::new(py, _Map::from(map, self.multi_doc.clone_ref(py), self.doc_id.clone()))?;
+        Ok(py_map)
+    }
+
+    fn insert_text_prelim<'py>(
+        &self,
+        py: Python<'py>,
+        txn: &mut _Transaction,
+        index: usize,
+    ) -> PyResult<Py<_Text>> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let mut list = self
+            .list
+            .mount_mut(&mut t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
+        let text: Unmounted<Text> = list
+            .insert(index, crate::types::text::TextPrelim::default())
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot insert text: {}", e)))?;
+        let py_text = Py::new(py, _Text::from(text, self.multi_doc.clone_ref(py), self.doc_id.clone()))?;
+        Ok(py_text)
+    }
+
+    fn len(&self, py: Python<'_>) -> PyResult<usize> {
+        let multi_doc = self.multi_doc.borrow(py);
+        let txn = multi_doc
+            .multi_doc
+            .transact(&self.doc_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot create transaction: {}", e)))?;
+        let list = self
+            .list
+            .mount(&txn)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
+        Ok(list.len())
+    }
+
+    fn to_py<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let multi_doc = self.multi_doc.borrow(py);
+        let txn = multi_doc
+            .multi_doc
+            .transact(&self.doc_id)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot create transaction: {}", e)))?;
+        let list = self
+            .list
+            .mount(&txn)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
+        let value = list
+            .to_value()
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot get value: {}", e)))?;
+        match value {
+            crate::lib0::Value::Array(arr) => {
+                let py_list = PyList::empty(py);
+                for item in &arr {
+                    let v = value_to_py(item, py)?;
+                    py_list.append(&v)?;
+                }
+                Ok(py_list)
+            }
+            _ => {
+                let py_list = PyList::empty(py);
+                Ok(py_list)
+            }
+        }
+    }
+}
+
 #[pyclass]
 pub struct _MultiDoc {
     pub multi_doc: MultiDoc,
@@ -383,5 +498,6 @@ fn _backcrdt(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<_Transaction>()?;
     m.add_class::<_Text>()?;
     m.add_class::<_Map>()?;
+    m.add_class::<_Array>()?;
     Ok(())
 }
