@@ -23,6 +23,7 @@ class BaseType(ABC):
 
     def _mount_root(self, txn: Transaction, name: str) -> None:
         self._mounted = getattr(txn._txn, f"mount_{self._type_name}")(name, txn._multi_doc, txn._doc._id)
+        self.doc = txn._doc
         self._init(self._prelim)
 
     def _mount(self, doc: Doc, mounted: BaseType) -> None:
