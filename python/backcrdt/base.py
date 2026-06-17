@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .transaction import Transaction
+from .transaction import ReadTransaction, Transaction
 
 
 base_types: dict[Any, type[BaseType]] = {}
@@ -38,3 +38,7 @@ class BaseType(ABC):
         mounted = method(txn._txn, *args)
         prelim = value._mount(self.doc, mounted)
         value._init(prelim)
+
+    def _forbid_read_transaction(self, txn: Transaction):
+        if isinstance(txn, ReadTransaction):
+            raise RuntimeError("Read-only transaction cannot be used to modify document structure")

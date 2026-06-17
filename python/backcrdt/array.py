@@ -29,7 +29,8 @@ class Array(BaseType):
                 self._mounted.insert(txn._txn, index, value)
 
     def __len__(self) -> int:
-        return self._mounted.len()
+        with self.doc.transaction() as txn:
+            return self._mounted.len(txn._txn)
 
     def to_py(self) -> list:
         return list(self._mounted.to_py())
