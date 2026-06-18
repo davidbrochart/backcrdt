@@ -27,6 +27,10 @@ class Map(BaseType):
     def __setitem__(self, key: str, value: T) -> None:
         self._set(key, value)
 
+    def __len__(self) -> int:
+        with self.doc.transaction() as txn:
+            return self._mounted.len(txn._txn)
+
     def to_py(self) -> dict:
         return self._mounted.to_py()
 

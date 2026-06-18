@@ -214,18 +214,27 @@ impl _Text {
 
 #[pymethods]
 impl _Text {
-    fn to_string<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
-        let multi_doc = self.multi_doc.borrow(py);
-        let txn = multi_doc
-            .multi_doc
-            .transact(&self.doc_id)
-            .map_err(|e| PyRuntimeError::new_err(format!("Cannot create transaction: {}", e)))?;
+    fn to_string<'py>(&self, py: Python<'py>, txn: &_Transaction) -> PyResult<Bound<'py, PyString>> {
+        let _t = txn.transaction();
+        let cell = _t.as_ref().unwrap();
+        let t: &Transaction = cell.as_ref();
         let text = self
             .text
-            .mount(&txn)
+            .mount(t)
             .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount text: {}", e)))?;
         let s = text.to_string();
         Ok(PyString::new(py, &s))
+    }
+
+    fn len(&self, txn: &_Transaction) -> PyResult<usize> {
+        let _t = txn.transaction();
+        let cell = _t.as_ref().unwrap();
+        let t: &Transaction = cell.as_ref();
+        let text = self
+            .text
+            .mount(t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount text: {}", e)))?;
+        Ok(text.len())
     }
 
     fn insert(&self, txn: &mut _Transaction, index: usize, chunk: &str) -> PyResult<()> {
@@ -237,6 +246,18 @@ impl _Text {
             .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount text: {}", e)))?;
         text.insert(index, chunk)
             .map_err(|e| PyRuntimeError::new_err(format!("Cannot insert into text: {}", e)))?;
+        Ok(())
+    }
+
+    fn remove_range(&self, txn: &mut _Transaction, index: usize, length: usize) -> PyResult<()> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let mut text = self
+            .text
+            .mount_mut(&mut t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount text: {}", e)))?;
+        text.remove_range(index..index + length)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot remove range from text: {}", e)))?;
         Ok(())
     }
 }
@@ -266,6 +287,18 @@ impl _Map {
         let in_val = py_to_in(value)?;
         let _ = map.insert(key, in_val);
         Ok(())
+    }
+
+    fn len(&self, txn: &_Transaction) -> PyResult<usize> {
+        let _t = txn.transaction();
+        let cell = _t.as_ref().unwrap();
+        let t: &Transaction = cell.as_ref();
+        let map = self
+            .map
+            .mount(t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount map: {}", e)))?;
+        map.len()
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot get map length: {}", e)))
     }
 
     fn to_py<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
@@ -400,15 +433,13 @@ impl _Array {
         Ok(py_text)
     }
 
-    fn len(&self, py: Python<'_>) -> PyResult<usize> {
-        let multi_doc = self.multi_doc.borrow(py);
-        let txn = multi_doc
-            .multi_doc
-            .transact(&self.doc_id)
-            .map_err(|e| PyRuntimeError::new_err(format!("Cannot create transaction: {}", e)))?;
+    fn len(&self, txn: &_Transaction) -> PyResult<usize> {
+        let _t = txn.transaction();
+        let cell = _t.as_ref().unwrap();
+        let t: &Transaction = cell.as_ref();
         let list = self
             .list
-            .mount(&txn)
+            .mount(t)
             .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
         Ok(list.len())
     }

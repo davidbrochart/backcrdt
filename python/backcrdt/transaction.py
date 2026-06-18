@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from types import TracebackType
 from typing import TYPE_CHECKING
@@ -41,8 +43,15 @@ class Transaction:
         if self._leases == 0:
             assert self._txn is not None
             try:
-                self._txn.commit()
+                if not isinstance(self, ReadTransaction):
+                    self._txn.commit()
             finally:
                 self._txn.drop()
                 self._txn = None
                 self._doc._txn = None
+
+
+class ReadTransaction(Transaction):
+    """
+    A read-only transaction that cannot be used to mutate a document.
+    """
