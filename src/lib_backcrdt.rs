@@ -382,6 +382,20 @@ impl _Array {
 
 #[pymethods]
 impl _Array {
+    fn get<'py>(&self, py: Python<'py>, txn: &_Transaction, index: usize) -> PyResult<Bound<'py, PyAny>> {
+        let _t = txn.transaction();
+        let cell = _t.as_ref().unwrap();
+        let t: &Transaction = cell.as_ref();
+        let list = self
+            .list
+            .mount(t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
+        let value: crate::lib0::Value = list
+            .get(index)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot get value from array: {}", e)))?;
+        value_to_py(&value, py)
+    }
+
     fn insert(&self, txn: &mut _Transaction, index: usize, value: &Bound<'_, PyAny>) -> PyResult<()> {
         let mut _t = txn.transaction();
         let mut t = _t.as_mut().unwrap().as_mut();
@@ -471,6 +485,18 @@ impl _Array {
                 Ok(py_list)
             }
         }
+    }
+
+    fn remove_range(&self, txn: &mut _Transaction, index: usize, length: usize) -> PyResult<()> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let mut list = self
+            .list
+            .mount_mut(&mut t)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot mount array: {}", e)))?;
+        list.remove_range(index..index + length)
+            .map_err(|e| PyRuntimeError::new_err(format!("Cannot remove range from array: {}", e)))?;
+        Ok(())
     }
 }
 
