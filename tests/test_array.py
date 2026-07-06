@@ -3,6 +3,18 @@ from pathlib import Path
 from backcrdt import Array, Doc, Map, MultiDoc, Text
 
 
+def test_iterate(doc):
+    doc["array"] = array = Array([0, 2, 1])
+    assert [val for val in array] == [0, 2, 1]
+    assert array[:2] == [0, 2]
+    assert array[1:] == [2, 1]
+    assert array[1:2] == [2]
+
+    # del array[1]
+    # FIXME: see https://github.com/Horusiath/ysr/pull/6
+    # assert array[:] == [0, 1]
+
+
 def test_array(tmp_path: Path) -> None:
     multi_doc = MultiDoc(tmp_path, max_dbs=2)
 
