@@ -29,6 +29,7 @@ classifiers = [
 
 dependencies = [
   "typing_extensions >=4.15.0,<5.0.0; python_version<'3.11'",
+  "pycrdt >=0.14.1,<0.15.0"
 ]
 
 [dependency-groups]

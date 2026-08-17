@@ -1,52 +1,48 @@
 from pathlib import Path
 
 import pytest
-from backcrdt import Doc, MultiDoc, Text
+from backcrdt import Doc, Text
 
 
-def test_text_init(multi_doc: MultiDoc) -> None:
-    doc = Doc(multi_doc)
-    doc["text"] = text = Text("hello")
+def test_text_init(doc0: Doc) -> None:
+    doc0["text"] = text = Text("hello")
     assert str(text) == "hello"
 
 
-def test_text_append(multi_doc: MultiDoc) -> None:
-    doc = Doc(multi_doc)
-    text = doc.get("text", type=Text)
+def test_text_append(doc0: Doc) -> None:
+    text = doc0.get("text", type=Text)
     assert str(text) == ""
-    with doc.transaction():
+    with doc0.transaction():
         text += "Hello,"
         text += " "
         text += "World!"
     assert str(text) == "Hello, World!"
 
 
-def test_text_concurrent(two_multi_docs: tuple[MultiDoc, MultiDoc]) -> None:
-    multi_doc0, multi_doc1 = two_multi_docs
-    doc0 = Doc(multi_doc0)
-    doc1 = Doc(multi_doc1)
+@pytest.mark.parametrize("i", range(10))
+def test_text_concurrent(doc0: Doc, doc1: Doc, i: int) -> None:
     text0 = doc0.get("text", type=Text)
     text1 = doc1.get("text", type=Text)
 
-    text0 += "hello"
-    text1 += "bye"
-    assert str(text0) == "hello"
-    assert str(text1) == "bye"
+    text0 += "Hello"
+    text1 += ", World!"
+    assert str(text0) == "Hello"
+    assert str(text1) == ", World!"
 
     doc1.apply_update(doc0.get_update())
     doc0.apply_update(doc1.get_update())
     text = str(text0)
-    assert text in ("byehello", "hellobye")
+    assert text in ("Hello, World!", ", World!Hello")
     assert str(text1) == text
 
 
-def test_iterate(doc: Doc):
-    doc["text"] = text = Text("abc")
+def test_iterate(doc0: Doc):
+    doc0["text"] = text = Text("abc")
     assert [char for char in text] == ["a", "b", "c"]
 
 
-def test_slice(doc: Doc) -> None:
-    doc["text"] = text = Text("hello")
+def test_slice(doc0: Doc) -> None:
+    doc0["text"] = text = Text("hello")
 
     for i, c in enumerate("hello"):
         assert text[i] == c
